@@ -60,13 +60,13 @@ proc step_failed { step } {
   close $ch
 }
 
+set_msg_config -id {Common 17-41} -limit 10000000
 
 start_step write_bitstream
 set ACTIVE_STEP write_bitstream
 set rc [catch {
   create_msg_db write_bitstream.pb
-  set_param tcl.collectionResultDisplayLimit 0
-  set_param xicom.use_bs_reader 1
+  set_param chipscope.maxJobs 2
   open_checkpoint phywhisperer_top_routed.dcp
   set_property webtalk.parent_dir C:/Users/jp/GitHub/phywhispererusb/hardware/fpga/vivado/pw_fpga.cache/wt [current_project]
   set_property XPM_LIBRARIES {XPM_CDC XPM_MEMORY} [current_project]

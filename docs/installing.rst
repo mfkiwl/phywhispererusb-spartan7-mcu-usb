@@ -1,20 +1,29 @@
 .. _installing:
 
 #############
-Prerequisites
+Installation
 #############
+
+Before installing, grab prerequisites for your platform:
+
 
  * :ref:`GNU/Linux <prerequisites-linux>`
  * :ref:`Windows <prerequisites-windows>`
  * :ref:`Mac <prerequisites-mac>`
+
+Then install:
+
+ * :ref:`Installation <install_phywhisperer>`
+
+*************
+Prerequisites
+*************
 
 .. _prerequisites-linux:
 
 *********
 GNU/Linux
 *********
-
-There is only manual install available on GNU/Linux.
 
 Python
 ======
@@ -28,6 +37,16 @@ On Ubuntu or similar:
 .. code:: bash
 
     sudo apt install python3 python3-pip
+
+Git
+===
+
+If you want the newest PhyWhisperer updates before they make it to release,
+grab git as well:
+
+.. code:: bash
+    
+    sudo apt install git
 
 
 Packages
@@ -44,38 +63,16 @@ as **pyusb** to work. Install using:
 Hardware Drivers
 ================
 
-The driver for Linux is built in; however, you need to allow your user account to access the peripheral. To do so, you'll have to make a file called :code:`/etc/udev/rules.d/99-newae.rules`. The contents of this file should be (this includes other NewAE
-products, you only really need the PhyWhisperer line):
+The driver for Linux is built in; however, you need to allow your user account to access the peripheral. To do so, you'll 
+have to make a file called :code:`/etc/udev/rules.d/99-newae.rules`. The contents of this file should be:
 
 .. code::
 
-    # CW-Lite
-    SUBSYSTEM=="usb", ATTRS{idVendor}=="2b3e", ATTRS{idProduct}=="ace2", MODE="0664", GROUP="plugdev"
-
-    # CW-1200
-    SUBSYSTEM=="usb", ATTRS{idVendor}=="2b3e", ATTRS{idProduct}=="ace3", MODE="0664", GROUP="plugdev"
-
-    # CW-Nano
-    SUBSYSTEM=="usb", ATTRS{idVendor}=="2b3e", ATTRS{idProduct}=="ace0", MODE="0664", GROUP="plugdev"
-
-    # CW-305 (Artix Target)
-    SUBSYSTEM=="usb", ATTRS{idVendor}=="2b3e", ATTRS{idProduct}=="c305", MODE="0664", GROUP="plugdev"
-    
-    # PhyWhisperer
-    SUBSYSTEM=="usb", ATTRS{idVendor}=="2b3e", ATTRS{idProduct}=="c610", MODE="0664", GROUP="plugdev"
-
-    # CW-CR2
-    SUBSYSTEM=="usb", ATTRS{idVendor}=="04b4", ATTRS{idProduct}=="8613", MODE="0664", GROUP="plugdev"
-    SUBSYSTEM=="usb", ATTRS{idVendor}=="221a", ATTRS{idProduct}=="0100", MODE="0664", GROUP="plugdev"
+    # Match all CW devices
+    SUBSYSTEM=="usb", ATTRS{idVendor}=="2b3e", ATTRS{idProduct}=="ace[0-9]|c[3-6][0-9][0-9]", TAG+="uaccess"
 
 Alternatively, you can just copy :code:`phywhispererusb/drivers/99-newae.rules`
 to :code:`/etc/udev/rules.d/`.
-
-Then add your username to the plugdev group:
-
-.. code:: bash
-
-    sudo usermod -a -G plugdev YOUR-USERNAME
 
 And reset the udev system:
 
@@ -131,11 +128,18 @@ notebooks.
 
 .. _WinPython: http://winpython.sourceforge.net/
 
+Git
+===
+
+If you want the newest PhyWhisperer updates before they make it to release,
+grab git as well: https://git-scm.com/download/win
+
 
 Installing Hardware Drivers
 ===========================
 
-Drivers can be downloaded as a .zip file for Windows. To install them:
+On firmware >= 1.1, drivers will be installed automatically upon plugging in
+your PhyWhisperer to Windows 8 or newer. Otherwise, drivers can be downloaded as a .zip file for Windows. To install them:
 
 1. Unzip the zip-file somewhere. Also remember where.
 2. Open your Device Manager.
@@ -146,13 +150,6 @@ Drivers can be downloaded as a .zip file for Windows. To install them:
 7. Point the wizard to the folder you unzipped, ensure the "look in subfolders" option is selected.
 
 .. _releases: https://github.com/newaetech/phywhispererusb/tree/master/drivers
-
-
-ChipWhisperer
-=============
-
-Remember that any time you install packages for python during the installation,
-use the *WinPython Command Prompt.exe*.
 
 .. _prerequisites-mac:
 
@@ -191,29 +188,48 @@ the board. You can install it using **brew**:
 Python
 ======
 
-You will require a python version >= to 3.5. You can get the binary from the
-Python Software Foundation's website. Choose one of the stable versions that
-has an installer for your machine. You can also run this command in your terminal:
+MacOS's default outdated Python usually interferes with the desired
+Python version (Python 3.6 or newer required and 3.7.x recommended).
+As such, we recommend using pyenv to install Python.
+
+You can get pyenv via brew:
 
 .. code:: bash
 
-    brew install python3
+    brew install pyenv
 
-You will have to check the version this downloads. It is best to have python 3.7.x
-
-
-.. code:: bash
-
-    python --version
-
-If this installs a version lower than 3.5, just download and manually install the
-Python interpreter from the Python Software Foundation's website. If you
-download and install the python interpreter manually from the website it should
-be available on the bash terminal after installation as:
+From there you can use pyenv to install the desired Python version (3.7.3 in this case):
 
 .. code:: bash
 
-    python3.7
+    pyenv install 3.7.3
+    pyenv global 3.7.3
 
-or the equivalent for your version.
+In addition, you'll want to add the following lines to your shell's startup file 
+(usually .bashrc or .zshrc) to ensure that pyenv sets your shell's path correctly
+at startup:
 
+.. code:: bash
+
+    if command -v pyenv 1>/dev/null 2>&1; then
+        eval "$(pyenv init -)"
+    fi
+
+Installing PhyWhisperer
+=======================
+
+.. _install_phywhisperer:
+
+You can either grab phywhisperer from pip, which installest the latest full release:
+
+.. code:: bash
+
+    pip install phywhisperer
+
+Or, if you want the latest updates before they make it to a full release, install via git:
+
+.. code:: bash
+
+    git clone https://github.com/newaetech/phywhispererusb
+    cd phywhispererusb
+    python setup.py develop

@@ -1,11 +1,11 @@
-Copyright 1986-2018 Xilinx, Inc. All Rights Reserved.
+Copyright 1986-2019 Xilinx, Inc. All Rights Reserved.
 ---------------------------------------------------------------------------------------------------------------------------
-| Tool Version : Vivado v.2018.3 (win64) Build 2405991 Thu Dec  6 23:38:27 MST 2018
-| Date         : Thu Dec  5 14:38:18 2019
+| Tool Version : Vivado v.2019.1 (win64) Build 2552052 Fri May 24 14:49:42 MDT 2019
+| Date         : Thu Feb  4 11:45:19 2021
 | Host         : qed running 64-bit major release  (build 9200)
 | Command      : report_utilization -file phywhisperer_top_utilization_synth.rpt -pb phywhisperer_top_utilization_synth.pb
 | Design       : phywhisperer_top
-| Device       : 7s6ftgb196-2
+| Device       : 7s15ftgb196-2
 | Design State : Synthesized
 ---------------------------------------------------------------------------------------------------------------------------
 
@@ -30,14 +30,14 @@ Table of Contents
 +-------------------------+------+-------+-----------+-------+
 |        Site Type        | Used | Fixed | Available | Util% |
 +-------------------------+------+-------+-----------+-------+
-| Slice LUTs*             | 1563 |     0 |      3750 | 41.68 |
-|   LUT as Logic          | 1563 |     0 |      3750 | 41.68 |
+| Slice LUTs*             | 1862 |     0 |      8000 | 23.28 |
+|   LUT as Logic          | 1862 |     0 |      8000 | 23.28 |
 |   LUT as Memory         |    0 |     0 |      2400 |  0.00 |
-| Slice Registers         | 3858 |     0 |      7500 | 51.44 |
-|   Register as Flip Flop | 3858 |     0 |      7500 | 51.44 |
-|   Register as Latch     |    0 |     0 |      7500 |  0.00 |
-| F7 Muxes                |  217 |     0 |      4000 |  5.43 |
-| F8 Muxes                |   96 |     0 |      2000 |  4.80 |
+| Slice Registers         | 3940 |     0 |     16000 | 24.63 |
+|   Register as Flip Flop | 3940 |     0 |     16000 | 24.63 |
+|   Register as Latch     |    0 |     0 |     16000 |  0.00 |
+| F7 Muxes                |  199 |     0 |      4000 |  4.98 |
+| F8 Muxes                |   39 |     0 |      2000 |  1.95 |
 +-------------------------+------+-------+-----------+-------+
 * Warning! The Final LUT count, after physical optimizations and full implementation, is typically lower. Run opt_design after synthesis, if not already completed, for a more realistic count.
 
@@ -56,8 +56,8 @@ Table of Contents
 | 0     |          Yes |           - |            - |
 | 0     |          Yes |           - |          Set |
 | 0     |          Yes |           - |        Reset |
-| 28    |          Yes |         Set |            - |
-| 3830  |          Yes |       Reset |            - |
+| 53    |          Yes |         Set |            - |
+| 3887  |          Yes |       Reset |            - |
 +-------+--------------+-------------+--------------+
 
 
@@ -67,9 +67,9 @@ Table of Contents
 +----------------+------+-------+-----------+-------+
 |    Site Type   | Used | Fixed | Available | Util% |
 +----------------+------+-------+-----------+-------+
-| Block RAM Tile |    0 |     0 |         5 |  0.00 |
-|   RAMB36/FIFO* |    0 |     0 |         5 |  0.00 |
-|   RAMB18       |    0 |     0 |        10 |  0.00 |
+| Block RAM Tile |    0 |     0 |        10 |  0.00 |
+|   RAMB36/FIFO* |    0 |     0 |        10 |  0.00 |
+|   RAMB18       |    0 |     0 |        20 |  0.00 |
 +----------------+------+-------+-----------+-------+
 * Note: Each Block RAM Tile only has one FIFO logic available and therefore can accommodate only one FIFO36E1 or one FIFO18E1. However, if a FIFO18E1 occupies a Block RAM Tile, that tile can still accommodate a RAMB18E1
 
@@ -80,7 +80,7 @@ Table of Contents
 +-----------+------+-------+-----------+-------+
 | Site Type | Used | Fixed | Available | Util% |
 +-----------+------+-------+-----------+-------+
-| DSPs      |    0 |     0 |        10 |  0.00 |
+| DSPs      |    0 |     0 |        20 |  0.00 |
 +-----------+------+-------+-----------+-------+
 
 
@@ -90,7 +90,7 @@ Table of Contents
 +-----------------------------+------+-------+-----------+-------+
 |          Site Type          | Used | Fixed | Available | Util% |
 +-----------------------------+------+-------+-----------+-------+
-| Bonded IOB                  |   58 |     0 |       100 | 58.00 |
+| Bonded IOB                  |   64 |     0 |       100 | 64.00 |
 | PHY_CONTROL                 |    0 |     0 |         2 |  0.00 |
 | PHASER_REF                  |    0 |     0 |         2 |  0.00 |
 | OUT_FIFO                    |    0 |     0 |         8 |  0.00 |
@@ -144,20 +144,21 @@ Table of Contents
 +--------------+------+---------------------+
 |   Ref Name   | Used | Functional Category |
 +--------------+------+---------------------+
-| FDRE         | 3830 |        Flop & Latch |
-| LUT6         |  835 |                 LUT |
-| LUT4         |  344 |                 LUT |
-| LUT2         |  297 |                 LUT |
-| LUT5         |  226 |                 LUT |
-| MUXF7        |  217 |               MuxFx |
-| CARRY4       |   98 |          CarryLogic |
-| MUXF8        |   96 |               MuxFx |
-| LUT3         |   88 |                 LUT |
-| IBUF         |   37 |                  IO |
-| FDSE         |   28 |        Flop & Latch |
-| OBUF         |   21 |                  IO |
-| LUT1         |   15 |                 LUT |
-| OBUFT        |    8 |                  IO |
+| FDRE         | 3887 |        Flop & Latch |
+| LUT6         |  901 |                 LUT |
+| LUT3         |  562 |                 LUT |
+| LUT4         |  513 |                 LUT |
+| LUT5         |  235 |                 LUT |
+| MUXF7        |  199 |               MuxFx |
+| LUT2         |  102 |                 LUT |
+| CARRY4       |  102 |          CarryLogic |
+| FDSE         |   53 |        Flop & Latch |
+| IBUF         |   46 |                  IO |
+| MUXF8        |   39 |               MuxFx |
+| LUT1         |   28 |                 LUT |
+| OBUF         |   18 |                  IO |
+| OBUFT        |   16 |                  IO |
+| PULLUP       |    8 |                 I/O |
 | ODDR         |    2 |                  IO |
 | USR_ACCESSE2 |    1 |              Others |
 +--------------+------+---------------------+

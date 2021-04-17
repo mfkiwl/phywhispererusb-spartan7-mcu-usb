@@ -55,6 +55,7 @@ class Usb(PWPacketDispatcher):
         self.capture_size = 8188 # default to FIFO size
         self.usb_trigger_freq = 240E6 #internal frequency used for trigger ticks
         self.entries_captured = 0
+        self.expected_verilog_matches = 74
         self.slurp_defines()
         # Set up the PW device to handle packets in ViewSB:
         if viewsb:
@@ -68,33 +69,43 @@ class Usb(PWPacketDispatcher):
         definitions by name and avoid 'magic numbers'.
         """
         self.verilog_define_matches = 0
-        defines_file = pkg_resources.resource_filename('phywhisperer', 'firmware/defines.v')
-        defines = open(defines_file, 'r')
-        define_regex_base  =   re.compile(r'`define')
-        define_regex_radix =   re.compile(r'`define\s+?(\w+).+?\'([bdh])([0-9a-fA-F]+)')
-        define_regex_noradix = re.compile(r'`define\s+?(\w+?)\s+?(\d+?)')
-        for define in defines:
-            if define_regex_base.search(define):
-                match = define_regex_radix.search(define)
-                if match:
-                    self.verilog_define_matches += 1
-                    if match.group(2) == 'b':
-                        radix = 2
-                    elif match.group(2) == 'h':
-                        radix = 16
+        defines_files = [pkg_resources.resource_filename('phywhisperer', 'firmware/defines_pw.v'),
+                         pkg_resources.resource_filename('phywhisperer', 'firmware/defines_usb.v')]
+        for i,defines_file in enumerate(defines_files):
+            defines = open(defines_file, 'r')
+            define_regex_base  =   re.compile(r'`define')
+            define_regex_reg   =   re.compile(r'`define\s+?REG_')
+            define_regex_radix =   re.compile(r'`define\s+?(\w+).+?\'([bdh])([0-9a-fA-F]+)')
+            define_regex_noradix = re.compile(r'`define\s+?(\w+?)\s+?(\d+?)')
+            for define in defines:
+                if define_regex_base.search(define):
+                    reg = define_regex_reg.search(define)
+                    match = define_regex_radix.search(define)
+                    if reg:
+                        if i == 0:
+                            block_offset = self.MAIN_REG_SELECT << 6
+                        else:
+                            block_offset = self.USB_REG_SELECT << 6
                     else:
-                        radix = 10
-                    setattr(self, match.group(1), int(match.group(3),radix))
-                else:
-                    match = define_regex_noradix.search(define)
+                        block_offset = 0
                     if match:
                         self.verilog_define_matches += 1
-                        setattr(self, match.group(1), int(match.group(2),10))
+                        if match.group(2) == 'b':
+                            radix = 2
+                        elif match.group(2) == 'h':
+                            radix = 16
+                        else:
+                            radix = 10
+                        setattr(self, match.group(1), int(match.group(3),radix) + block_offset)
                     else:
-                        logging.warning("Couldn't parse line: %s", define)
-        # make sure everything is cool:
-        assert self.verilog_define_matches == 58, "Trouble parsing Verilog defines file (%s): didn't find the right number of defines." % defines_file
-        defines.close()
+                        match = define_regex_noradix.search(define)
+                        if match:
+                            self.verilog_define_matches += 1
+                            setattr(self, match.group(1), int(match.group(2),10) + block_offset)
+                        else:
+                            logging.warning("Couldn't parse line: %s", define)
+            defines.close()
+        assert self.verilog_define_matches == self.expected_verilog_matches, "Trouble parsing Verilog defines files: didn't find the right number of defines (expected %d, got %d)." % (self.expected_verilog_matches, self.verilog_define_matches)
 
 
     def con(self, PID=0xC610, sn=None, program_fpga=True, bitstream_file=None):
@@ -123,6 +134,8 @@ class Usb(PWPacketDispatcher):
                 with open(bitstream_file,"rb") as bitstream:
                     self._llint.FPGAProgram(bitstream) 
 
+        self.write_reg(self.REG_COUNT_WRITES, [1])
+
 
     def set_power_source(self, src):
         """Set power source for target.
@@ -148,8 +161,13 @@ class Usb(PWPacketDispatcher):
 
     def reset_fpga(self):
         """ Reset FPGA registers to defaults, use liberally to clear incorrect states.
+
+        This method clears all settings - everything will be set back to default!
         """
-        self._llint.resetFPGA()
+        #self._llint.resetFPGA()
+        self.write_reg(self.REG_RESET_REG, [1])
+        self.write_reg(self.REG_RESET_REG, [0])
+        self.write_reg(self.REG_COUNT_WRITES, [1])
 
     def load_bitstream(self, bitfile):
         """Load bitstream onto FPGA"""
@@ -161,6 +179,28 @@ class Usb(PWPacketDispatcher):
         pass
 
 
+    def auto_program(self):
+        """ Erases the firmware of the onboard SAM3U, and reprograms it with default firmware
+
+        Attempts to autodetect the COM PORT that the SAM3U shows up as. If this fails, it will
+        be necessary to flash new firmware via :code:`program_sam3u`
+        """
+        import time, serial.tools.list_ports
+        before = serial.tools.list_ports.comports()
+        before = [b.device for b in before]
+        time.sleep(0.5)
+        self.erase_sam3u()
+        time.sleep(1.5)
+        after = serial.tools.list_ports.comports()
+        after = [a.device for a in after]
+        candidate = list(set(before) ^ set(after))
+        if len(candidate) == 0:
+            raise OSError("Could not detect COMPORT. Continue using programmer.program()")
+        com = candidate[0]
+        print("Detected com port {}".format(com))
+        self.program_sam3u(com)
+        
+        
     def erase_sam3u(self):
         """Erase the SAM3U Firmware, which forces it into bootloader mode."""
         self._llint.eraseFW(confirm=True)
@@ -170,6 +210,9 @@ class Usb(PWPacketDispatcher):
         
         Args:
             port (str): Serial port name, such as 'COM36' or '/dev/ttyACM0'.        
+
+            fw_path (str): Path to firmware binary to program the sam3u with.
+                            If None, use default firmware. Defautls to None.
         """
 
         fw_data = None
@@ -217,28 +260,51 @@ class Usb(PWPacketDispatcher):
                        determine the speed.
         """
         if mode == 'auto':
-           self.usb.cmdWriteMem(self.REG_USB_SPEED, [self.USB_SPEED_AUTO])
+           self.write_reg(self.REG_USB_SPEED, [self.USB_SPEED_AUTO])
         elif mode == 'LS':
-           self.usb.cmdWriteMem(self.REG_USB_SPEED, [self.USB_SPEED_LS])
+           self.write_reg(self.REG_USB_SPEED, [self.USB_SPEED_LS])
         elif mode == 'FS':
-           self.usb.cmdWriteMem(self.REG_USB_SPEED, [self.USB_SPEED_FS])
+           self.write_reg(self.REG_USB_SPEED, [self.USB_SPEED_FS])
         elif mode == 'HS':
-           self.usb.cmdWriteMem(self.REG_USB_SPEED, [self.USB_SPEED_HS])
+           self.write_reg(self.REG_USB_SPEED, [self.USB_SPEED_HS])
         else:
            raise ValueError('Invalid mode %s; specify auto, LS, FS, or HS.' % mode)
         pass
 
 
+    def write_reg(self, address, data):
+        """Write a PhyWhisperer register.
+        
+        Args:
+            address: int
+            data: bytes
+        """
+        return self.usb.cmdWriteMem(address, data)
+
+
+    def read_reg(self, address, size=1):
+        """Reads a PhyWhisperer register.
+        
+        Args:
+            address: int
+            size: int, number of bytes to read
+        Returns:
+        """
+        return self.usb.cmdReadMem(address, size)
+
+
     def get_usb_mode(self):
         """Returns USB PHY speed.
            Return values:
-               'auto': the speed has not been determined yet (was the mode set
+
+               - 'auto': the speed has not been determined yet (was the mode set
                    to 'auto' _before_ the target was connected or powered up?).
-               'LS': low speed
-               'FS': full speed
-               'HS: high speed
+               - 'LS': low speed
+               - 'FS': full speed
+               - 'HS: high speed
+        
         """
-        value = self.usb.cmdReadMem(self.REG_USB_SPEED, 1)[0]
+        value = self.read_reg(self.REG_USB_SPEED)[0]
         if value == self.USB_SPEED_AUTO:
             return 'auto'
         elif value == self.USB_SPEED_LS:
@@ -289,7 +355,7 @@ class Usb(PWPacketDispatcher):
                     if timeout and time.time() - starttime > timeout:
                         logging.warning("Capture timed out!")
                         break
-                data.append(self.usb.cmdReadMem(self.REG_SNIFF_FIFO_RD, 4)[0:3])
+                data.append(self.read_reg(self.REG_SNIFF_FIFO_RD, 4)[1:4])
                 entries_read += 1
 
         else:
@@ -297,13 +363,13 @@ class Usb(PWPacketDispatcher):
             early_exit = False
             raw = []
             while notdone:
-                raw.extend(self.usb.cmdReadMem(self.REG_SNIFF_FIFO_RD, 4*burst_size))
+                raw.extend(self.read_reg(self.REG_SNIFF_FIFO_RD, 4*burst_size))
                 # check CAPTURE_DONE and EMPTY flags on last entry read:
                 bitmask = 2**self.FE_FIFO_STAT_CAPTURE_DONE + 2**self.FE_FIFO_STAT_EMPTY
-                if raw[-2] & bitmask == bitmask:
+                if raw[-1] & bitmask == bitmask:
                     notdone = False
                     # did we also overflow?
-                    if raw[-2] & 2**self.FE_FIFO_STAT_OVERFLOW_BLOCKED:
+                    if raw[-1] & 2**self.FE_FIFO_STAT_OVERFLOW_BLOCKED:
                         logging.warning("FIFO overflowed, capture stopped.")
                         early_exit = True
                 elif timeout and time.time() - starttime > timeout:
@@ -312,8 +378,8 @@ class Usb(PWPacketDispatcher):
                     early_exit = True
             # reformat the return array and at the same time, filter out the (possibly numerous) empty FIFO reads:
             for i in range(int(len(raw)/4)):
-                if raw[i*4+2] & 3 != self.FE_FIFO_CMD_STRM:
-                    data.append(raw[i*4:i*4+3])
+                if raw[i*4+3] & 3 != self.FE_FIFO_CMD_STRM:
+                    data.append(raw[i*4+1:i*4+4])
             self.entries_captured = len(data)
             if early_exit:
                 logging.warning("%d entries captured." % self.entries_captured)
@@ -350,9 +416,7 @@ class Usb(PWPacketDispatcher):
                 data = raw[1]
                 ts = raw[0] & 0x7
                 self.short_timestamps[ts] += 1
-                #hardware reports the number of cycles between events, so to
-                #obtain elapsed time we add one:
-                timestep += (ts+1)
+                timestep += ts
                 flags = (raw[0] & 0xf8) >> 3
                 if verbose:
                    print("%8d   flags=%02x data=%02x"%(timestep, flags, data))
@@ -366,7 +430,7 @@ class Usb(PWPacketDispatcher):
             elif (command == self.FE_FIFO_CMD_STAT):
                 ts = raw[0] & 0x7
                 self.short_timestamps[ts] += 1
-                timestep += (ts+1)
+                timestep += ts
                 flags = (raw[0] & 0xf8) >> 3
                 if verbose:
                    print("%8d   flags=%02x"%(timestep, flags))
@@ -453,7 +517,7 @@ class Usb(PWPacketDispatcher):
         if (size >= 2**24) or (size < 0):
             raise ValueError('Illegal size value.')
         self.capture_size = size
-        self.usb.cmdWriteMem(self.REG_CAPTURE_LEN, int.to_bytes(size, length=2, byteorder='little'))
+        self.write_reg(self.REG_CAPTURE_LEN, int.to_bytes(size, length=2, byteorder='little'))
 
 
     def ns_trigger(self, delay_in_ns):
@@ -505,7 +569,7 @@ class Usb(PWPacketDispatcher):
             if (delay >= 2**20) or (delay < 0) or (delay < 1 and i > 0):
                 raise ValueError('Illegal delay value.')
             data += delay << i*24
-        self.usb.cmdWriteMem(self.REG_TRIGGER_DELAY, int.to_bytes(data, length=3*num_triggers, byteorder='little'))
+        self.write_reg(self.REG_TRIGGER_DELAY, int.to_bytes(data, length=3*num_triggers, byteorder='little'))
 
         data = 0
         for i in range(num_triggers):
@@ -513,14 +577,14 @@ class Usb(PWPacketDispatcher):
             if (width >= 2**17) or (width < 1):
                 raise ValueError('Illegal width value.')
             data += width << i*24
-        self.usb.cmdWriteMem(self.REG_TRIGGER_WIDTH, int.to_bytes(data, length=3*num_triggers, byteorder='little'))
+        self.write_reg(self.REG_TRIGGER_WIDTH, int.to_bytes(data, length=3*num_triggers, byteorder='little'))
 
-        self.usb.cmdWriteMem(self.REG_NUM_TRIGGERS, [num_triggers])
+        self.write_reg(self.REG_NUM_TRIGGERS, [num_triggers])
         self.set_capture_delay(int(delay/4))
         if enable == True:
-            self.usb.cmdWriteMem(self.REG_TRIGGER_ENABLE, [1])
+            self.write_reg(self.REG_TRIGGER_ENABLE, [1])
         else:
-            self.usb.cmdWriteMem(self.REG_TRIGGER_ENABLE, [0])
+            self.write_reg(self.REG_TRIGGER_ENABLE, [0])
 
 
     def set_capture_delay(self, delay):
@@ -532,7 +596,7 @@ class Usb(PWPacketDispatcher):
         """
         if (delay >= 2**18) or (delay < 0):
             raise ValueError('Illegal delay value.')
-        self.usb.cmdWriteMem(self.REG_CAPTURE_DELAY, int.to_bytes(delay, length=3, byteorder='little'))
+        self.write_reg(self.REG_CAPTURE_DELAY, int.to_bytes(delay, length=3, byteorder='little'))
 
 
     def set_pattern(self, pattern, mask=None):
@@ -552,9 +616,9 @@ class Usb(PWPacketDispatcher):
             raise ValueError('pattern and mask cannot be more than 64 bytes.')
         # extend the mask to full width (cheaper to do here than in HW):
         mask = [0]* (self.MAX_PATTERN_LENGTH - len(mask)) + mask
-        self.usb.cmdWriteMem(self.REG_PATTERN, pattern[::-1])
-        self.usb.cmdWriteMem(self.REG_PATTERN_MASK, mask[::-1])
-        self.usb.cmdWriteMem(self.REG_PATTERN_BYTES, [len(pattern)])
+        self.write_reg(self.REG_PATTERN, pattern[::-1])
+        self.write_reg(self.REG_PATTERN_MASK, mask[::-1])
+        self.write_reg(self.REG_PATTERN_BYTES, [len(pattern)])
         self.pattern = pattern
         self.mask = mask
 
@@ -566,7 +630,7 @@ class Usb(PWPacketDispatcher):
         Use set_trigger to program the trigger parameters.
         Use set_capture_size and set_capture_delay to program the capture parameters.
         """
-        self.usb.cmdWriteMem(self.REG_ARM, [1])
+        self.write_reg(self.REG_ARM, [1])
 
 
     def check_fifo_errors(self, underflow=0, overflow=0):
@@ -576,7 +640,7 @@ class Usb(PWPacketDispatcher):
             underflow (int, optional): expected status, 0 or 1
             overflow (int, optional): expected status, 0 or 1
         """
-        status = self.usb.cmdReadMem(self.REG_SNIFF_FIFO_STAT,1)[0]
+        status = self.read_reg(self.REG_SNIFF_FIFO_STAT, 1)[0]
         fifo_underflow = (status & 2) >> 1
         fifo_overflow = (status & 16) >> 4
         assert fifo_underflow == underflow
@@ -586,7 +650,7 @@ class Usb(PWPacketDispatcher):
     def fifo_empty(self):
         """Returns True if the capture FIFO is empty, False otherwise.
         """
-        if self.usb.cmdReadMem(self.REG_SNIFF_FIFO_STAT,1)[0] & 1:
+        if self.read_reg(self.REG_SNIFF_FIFO_STAT, 1)[0] & 1:
             return True
         else:
             return False
@@ -595,7 +659,7 @@ class Usb(PWPacketDispatcher):
     def fifo_over_empty_threshold(self):
         """Returns True if the capture FIFO has more entries than the empty threshold (128).
         """
-        fifo_stat = self.usb.cmdReadMem(self.REG_SNIFF_FIFO_STAT,1)[0]
+        fifo_stat = self.read_reg(self.REG_SNIFF_FIFO_STAT, 1)[0]
         fifo_empty = fifo_stat & 1
         fifo_empty_threshold = fifo_stat & 4
         if fifo_empty or fifo_empty_threshold:
@@ -607,7 +671,7 @@ class Usb(PWPacketDispatcher):
     def armed(self):
         """Returns True if the PhyWhisperer is armed.
         """
-        if self.usb.cmdReadMem(self.REG_ARM,1)[0]:
+        if self.read_reg(self.REG_ARM, 1)[0]:
             return True
         else:
             return False
@@ -623,7 +687,7 @@ class Usb(PWPacketDispatcher):
     def get_fpga_buildtime(self):
         """Returns date and time when FPGA bitfile was generated.
         """
-        raw = self.usb.cmdReadMem(self.REG_BUILDTIME,4)
+        raw = self.read_reg(self.REG_BUILDTIME, 4)
         # definitions: Xilinx XAPP1232
         day = raw[3] >> 3
         month = ((raw[3] & 0x7) << 1) + (raw[2] >> 7)
@@ -647,8 +711,8 @@ class Usb(PWPacketDispatcher):
         else:
             value = [0]
         for i in range(abs(steps)):
-            self.usb.cmdWriteMem(self.REG_TRIG_CLK_PHASE_SHIFT, value)
-            while (self.usb.cmdReadMem(self.REG_TRIG_CLK_PHASE_SHIFT, 1)[0] == 1):
+            self.write_reg(self.REG_TRIG_CLK_PHASE_SHIFT, value)
+            while (self.read_reg(self.REG_TRIG_CLK_PHASE_SHIFT, 1)[0] == 1):
                 # phase shift incomplete; wait:
                 pass
 
@@ -664,7 +728,7 @@ class Usb(PWPacketDispatcher):
             raise ValueError('Illegal pattern value, must be <= 0x1f.')
         if mask < 1 or mask > 0x1f:
             raise ValueError('Illegal mask value, must be <= 0x1f and > 0.')
-        self.usb.cmdWriteMem(self.REG_STAT_PATTERN, [pattern, mask])
+        self.write_reg(self.REG_STAT_PATTERN, [pattern, mask])
 
 
     def stat_pattern_matched(self):
@@ -672,7 +736,7 @@ class Usb(PWPacketDispatcher):
         and when a new match pattern is written).
         Actual match value is stored in self.stat_pattern_match_value.
         """
-        matched, value = self.usb.cmdReadMem(self.REG_STAT_MATCH, 2)
+        matched, value = self.read_reg(self.REG_STAT_MATCH, 2)
         self.stat_pattern_match_value = value
         return matched
 
@@ -763,11 +827,11 @@ class Usb(PWPacketDispatcher):
             early_exit = False
             starttime = time.time()
             while notdone:
-                raw = self.usb.cmdReadMem(self.REG_SNIFF_FIFO_RD, 4*burst_size)
+                raw = self.read_reg(self.REG_SNIFF_FIFO_RD, 4*burst_size)
                 bitmask = 2**self.FE_FIFO_STAT_CAPTURE_DONE + 2**self.FE_FIFO_STAT_EMPTY
-                if raw[-2] & bitmask == bitmask:
+                if raw[-3] & bitmask == bitmask:
                     notdone = False
-                    if raw[-2] & 2**self.FE_FIFO_STAT_OVERFLOW_BLOCKED:
+                    if raw[-3] & 2**self.FE_FIFO_STAT_OVERFLOW_BLOCKED:
                         logging.warning("FIFO overflowed, capture stopped")
                         early_exit = True
                 elif timeout and time.time() - starttime > timeout:
@@ -777,8 +841,8 @@ class Usb(PWPacketDispatcher):
                 # filter out the empty FIFO reads:
                 rawdata = []
                 for i in range(int(len(raw)/4)):
-                    if raw[i*4+2] & 3 != self.FE_FIFO_CMD_STRM:
-                        rawdata.append(raw[i*4:i*4+3])
+                    if raw[i*4+3] & 3 != self.FE_FIFO_CMD_STRM:
+                        rawdata.append(raw[i*4+1:i*4+4])
                 self.handle_incoming_bytes(rawdata)
                 self.entries_captured += len(rawdata)
                 if early_exit:

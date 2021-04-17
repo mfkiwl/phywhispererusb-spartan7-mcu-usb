@@ -17,11 +17,11 @@ proc create_report { reportName command } {
     send_msg_id runtcl-5 warning "$msg"
   }
 }
-set_param tcl.collectionResultDisplayLimit 0
-set_param xicom.use_bs_reader 1
+set_param chipscope.maxJobs 2
+set_msg_config -id {Common 17-41} -limit 10000000
 set_param project.vivado.isBlockSynthRun true
 set_msg_config -msgmgr_mode ooc_run
-create_project -in_memory -part xc7s6ftgb196-2
+create_project -in_memory -part xc7s15ftgb196-2
 
 set_param project.singleFileAddWarning.threshold 0
 set_param project.compositeFile.enableAutoGeneration 0
@@ -36,7 +36,7 @@ set_property ip_repo_paths v:/vivado/Arm_ipi_repository [current_project]
 update_ip_catalog
 set_property ip_output_repo c:/Users/jp/GitHub/phywhispererusb/hardware/fpga/vivado/pw_fpga.cache/ip [current_project]
 set_property ip_cache_permissions {read write} [current_project]
-set_property verilog_define ILA [current_fileset]
+set_property include_dirs C:/Users/jp/GitHub/phywhispererusb/software/phywhisperer/firmware [current_fileset]
 read_ip -quiet C:/Users/jp/GitHub/phywhispererusb/hardware/fpga/vivado/pw_fpga.srcs/sources_1/ip/ila_3/ila_3.xci
 set_property used_in_synthesis false [get_files -all c:/Users/jp/GitHub/phywhispererusb/hardware/fpga/vivado/pw_fpga.srcs/sources_1/ip/ila_3/ila_v6_2/constraints/ila_impl.xdc]
 set_property used_in_implementation false [get_files -all c:/Users/jp/GitHub/phywhispererusb/hardware/fpga/vivado/pw_fpga.srcs/sources_1/ip/ila_3/ila_v6_2/constraints/ila_impl.xdc]
@@ -55,12 +55,12 @@ read_xdc dont_touch.xdc
 set_property used_in_implementation false [get_files dont_touch.xdc]
 set_param ips.enableIPCacheLiteLoad 1
 
-set cached_ip [config_ip_cache -export -no_bom -use_project_ipc -dir C:/Users/jp/GitHub/phywhispererusb/hardware/fpga/vivado/pw_fpga.runs/ila_3_synth_1 -new_name ila_3 -ip [get_ips ila_3]]
+set cached_ip [config_ip_cache -export -no_bom  -dir C:/Users/jp/GitHub/phywhispererusb/hardware/fpga/vivado/pw_fpga.runs/ila_3_synth_1 -new_name ila_3 -ip [get_ips ila_3]]
 
 if { $cached_ip eq {} } {
 close [open __synthesis_is_running__ w]
 
-synth_design -top ila_3 -part xc7s6ftgb196-2 -mode out_of_context
+synth_design -top ila_3 -part xc7s15ftgb196-2 -mode out_of_context
 
 #---------------------------------------------------------
 # Generate Checkpoint/Stub/Simulation Files For IP Cache
@@ -163,15 +163,15 @@ if { [catch {
 
 }; # end if cached_ip 
 
-if {[file isdir C:/Users/jp/GitHub/phywhispererusb/hardware/fpga/vivado/pw_fpga.ip_user_files/ip/ila_3]} {
+if {[file isdir W:/../phywhispererusb/hardware/fpga/vivado/pw_fpga.ip_user_files/ip/ila_3]} {
   catch { 
-    file copy -force C:/Users/jp/GitHub/phywhispererusb/hardware/fpga/vivado/pw_fpga.srcs/sources_1/ip/ila_3/ila_3_stub.v C:/Users/jp/GitHub/phywhispererusb/hardware/fpga/vivado/pw_fpga.ip_user_files/ip/ila_3
+    file copy -force C:/Users/jp/GitHub/phywhispererusb/hardware/fpga/vivado/pw_fpga.srcs/sources_1/ip/ila_3/ila_3_stub.v W:/../phywhispererusb/hardware/fpga/vivado/pw_fpga.ip_user_files/ip/ila_3
   }
 }
 
-if {[file isdir C:/Users/jp/GitHub/phywhispererusb/hardware/fpga/vivado/pw_fpga.ip_user_files/ip/ila_3]} {
+if {[file isdir W:/../phywhispererusb/hardware/fpga/vivado/pw_fpga.ip_user_files/ip/ila_3]} {
   catch { 
-    file copy -force C:/Users/jp/GitHub/phywhispererusb/hardware/fpga/vivado/pw_fpga.srcs/sources_1/ip/ila_3/ila_3_stub.vhdl C:/Users/jp/GitHub/phywhispererusb/hardware/fpga/vivado/pw_fpga.ip_user_files/ip/ila_3
+    file copy -force C:/Users/jp/GitHub/phywhispererusb/hardware/fpga/vivado/pw_fpga.srcs/sources_1/ip/ila_3/ila_3_stub.vhdl W:/../phywhispererusb/hardware/fpga/vivado/pw_fpga.ip_user_files/ip/ila_3
   }
 }
 file delete __synthesis_is_running__
